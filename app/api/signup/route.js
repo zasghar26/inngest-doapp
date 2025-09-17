@@ -2,13 +2,15 @@
 import { NextResponse } from "next/server";
 import { inngest } from "../../../src/inngest/client.js";
 
-const isEmail = (v) => typeof v === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+const isEmail = (v) =>
+  typeof v === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
 export async function POST(req) {
   try {
     const ct = req.headers.get("content-type") || "";
     let email = "";
 
+    // Accept JSON or form POSTs
     if (ct.includes("application/json")) {
       const json = await req.json().catch(() => ({}));
       email = String(json.email || "");
@@ -18,35 +20,39 @@ export async function POST(req) {
     }
 
     if (!isEmail(email)) {
-      return NextResponse.json({ error: "Invalid email" }, { status: 400 });
+      return NextResponse.json(
+        { ok: false, error: "Invalid email" },
+        { status: 400 }
+      );
     }
 
-    // Send event, but never crash the request
+    // Send the event to Inngest
     let sent = false;
     let sendError = null;
-
     try {
-      if (!process.env.INNGEST_EVENT_KEY) {
-        throw new Error("INNGEST_EVENT_KEY missing at runtime");
-      }
       await inngest.send({
         name: "app/user.created",
-        data: { email, at: new Date().toISOString() },
+        data: { email },
       });
       sent = true;
-    } catch (e) {
-      sendError = e instanceof Error ? e.message : String(e);
-      console.error("[/api/signup] inngest.send failed:", sendError);
+    } catch (err) {
+      sendError = err;
+      console.error("[/api/signup] inngest.send failed:", err);
     }
 
-    // For form posts, redirect with result flags so the UI can show a message
-    const url = new URL("/", req.url);
-    url.searchParams.set("ok", sent ? "1" : "0");
-    if (sendError) url.searchParams.set("err", "send");
-    return NextResponse.redirect("/?ok=1", 303);
+    // If it was a form post, redirect back to the home page with a status
+    if (!ct.includes("application/json")) {
+      const url = new URL("/", req.url);
+      url.searchParams.set("ok", sent ? "1" : "0");
+      if (sendError) url.searchParams.set("err", "send");
+      return NextResponse.redirect(url.toString(), 303);
+    }
+
+    // JSON response for programmatic calls
+    return NextResponse.json({ ok: sent, error: sendError ? "send_failed" : null });
   } catch (err) {
     console.error("[/api/signup] handler error:", err?.stack || err);
-    // Return JSON instead of throwing a 500
+    // Deliberately return JSON (not a 500) so you can see it in the browser
     return NextResponse.json({ error: "Internal error" }, { status: 200 });
   }
 }
