@@ -40,19 +40,22 @@ export async function POST(req) {
       console.error("[/api/signup] inngest.send failed:", err);
     }
 
-    // If it was a form post, redirect back to the home page with a status
+    // If it was a form post, redirect back with relative URL
     if (!ct.includes("application/json")) {
-      const url = new URL("/", req.url);
-      url.searchParams.set("ok", sent ? "1" : "0");
-      if (sendError) url.searchParams.set("err", "send");
-      return NextResponse.redirect(url.toString(), 303);
+      const params = new URLSearchParams({
+        ok: sent ? "1" : "0",
+        ...(sendError ? { err: "send" } : {}),
+      });
+      return NextResponse.redirect(`/?${params.toString()}`, 303);
     }
 
     // JSON response for programmatic calls
-    return NextResponse.json({ ok: sent, error: sendError ? "send_failed" : null });
+    return NextResponse.json({
+      ok: sent,
+      error: sendError ? "send_failed" : null,
+    });
   } catch (err) {
     console.error("[/api/signup] handler error:", err?.stack || err);
-    // Deliberately return JSON (not a 500) so you can see it in the browser
     return NextResponse.json({ error: "Internal error" }, { status: 200 });
   }
 }
