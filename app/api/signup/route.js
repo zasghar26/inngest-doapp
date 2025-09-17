@@ -43,7 +43,7 @@ export async function POST(req) {
     const url = new URL("/", req.url);
     url.searchParams.set("ok", sent ? "1" : "0");
     if (sendError) url.searchParams.set("err", "send");
-    return NextResponse.redirect(url, 303);
+    return NextResponse.redirect("/?ok=1", 303);
   } catch (err) {
     console.error("[/api/signup] handler error:", err?.stack || err);
     // Return JSON instead of throwing a 500
