@@ -5,16 +5,14 @@ import { inngest } from "../../../src/inngest/client.js";
 const isEmail = (v) =>
   typeof v === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
-// Helpful in logs without dumping full stack in prod
-const reason = (e) =>
-  (e && (e.message || e.toString?.())) || "unknown_error";
-
-// If someone opens /api/signup in the browser:
-export async function GET() {
-  return NextResponse.json(
-    { ok: false, error: "Use POST with { email }" },
-    { status: 405 }
-  );
+function buildRedirect(req, params) {
+  const proto = req.headers.get("x-forwarded-proto") || "https";
+  const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
+  const url = new URL("/", `${proto}://${host}`);
+  for (const [k, v] of Object.entries(params)) {
+    url.searchParams.set(k, v);
+  }
+  return url.toString();
 }
 
 export async function POST(req) {
@@ -22,7 +20,6 @@ export async function POST(req) {
     const ct = (req.headers.get("content-type") || "").toLowerCase();
     let email = "";
 
-    // Accept JSON and form posts only; don't call formData() if not form
     if (ct.includes("application/json")) {
       const json = await req.json().catch(() => ({}));
       email = String(json.email || "");
@@ -32,19 +29,6 @@ export async function POST(req) {
     ) {
       const form = await req.formData().catch(() => null);
       email = String((form && form.get("email")) || "");
-    } else {
-      // No/unknown content-type: try JSON first, then form, then give up
-      try {
-        const json = await req.json();
-        email = String(json?.email || "");
-      } catch {
-        try {
-          const form = await req.formData();
-          email = String(form?.get("email") || "");
-        } catch {
-          // No body we can parse
-        }
-      }
     }
 
     if (!isEmail(email)) {
@@ -54,45 +38,31 @@ export async function POST(req) {
       );
     }
 
-    // Send the event to Inngest
     let sent = false;
     let sendErr = null;
     try {
-      await inngest.send({
-        name: "app/user.created",
-        data: { email },
-      });
+      await inngest.send({ name: "app/user.created", data: { email } });
       sent = true;
     } catch (e) {
       sendErr = e;
       console.error("[/api/signup] inngest.send failed:", e);
     }
 
-    // If caller posted a form, redirect back to the same site (relative URL)
-    const isJson = ct.includes("application/json");
-    if (!isJson) {
-      const params = new URLSearchParams({
-        ok: sent ? "1" : "0",
-        ...(sendErr ? { err: "send" } : {}),
-      });
-      return NextResponse.redirect(`/?${params.toString()}`, 303);
+    // For form POSTs: redirect
+    if (!ct.includes("application/json")) {
+      return NextResponse.redirect(
+        buildRedirect(req, { ok: sent ? "1" : "0", ...(sendErr && { err: "send" }) }),
+        303
+      );
     }
 
-    // JSON callers get a JSON result (useful for debugging)
+    // For JSON POSTs: return JSON
     return NextResponse.json({
       ok: sent,
       error: sendErr ? "send_failed" : null,
-      ...(process.env.NODE_ENV !== "production" && sendErr
-        ? { details: reason(sendErr) }
-        : {}),
     });
   } catch (e) {
     console.error("[/api/signup] handler error:", e);
-    // Return JSON with a concrete reason in dev
-    const payload =
-      process.env.NODE_ENV !== "production"
-        ? { error: "Internal error", details: reason(e) }
-        : { error: "Internal error" };
-    return NextResponse.json(payload, { status: 500 });
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
