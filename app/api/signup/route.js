@@ -6,26 +6,10 @@ function isEmail(v) {
 }
 
 export async function POST(req) {
-  const ct = req.headers.get("content-type") || "";
-  let email = "";
+  const form = await req.formData();
+  const email = String(form.get("email") || "");
+  if (!isEmail(email)) return NextResponse.json({ error: "Invalid email" }, { status: 400 });
 
-  if (ct.includes("application/json")) {
-    const json = await req.json().catch(() => ({}));
-    email = String(json.email || "");
-  } else {
-    const form = await req.formData();
-    email = String(form.get("email") || "");
-  }
-
-  if (!isEmail(email)) {
-    return NextResponse.json({ error: "Invalid email" }, { status: 400 });
-  }
-
-  await inngest.send({
-    name: "app/user.created",
-    data: { email, at: new Date().toISOString() },
-  });
-
-  // Redirect back to home (works on any hostname)
+  await inngest.send({ name: "app/user.created", data: { email, at: new Date().toISOString() } });
   return NextResponse.redirect(new URL("/", req.url), 303);
 }
