@@ -1,0 +1,43 @@
+name: nextjs-inngest-doapp
+services:
+  - name: web
+    environment_slug: node-js
+    http_port: 3000
+    build_command: "npm ci && npm run build"
+    run_command: "npm run start"
+    routes:
+      - path: /
+      - path: /api
+    envs:
+      - key: NODE_ENV
+        value: production
+      - key: INNGEST_APP_NAME
+        value: nextjs-inngest-doapp
+      - key: INNGEST_ENV
+        value: prod
+      - key: INNGEST_EVENT_KEY
+        type: SECRET
+        scope: RUN_TIME
+      - key: INNGEST_SIGNING_KEY
+        type: SECRET
+        scope: RUN_TIME
+
+  - name: worker
+    environment_slug: node-js
+    instance_size_slug: basic-xxs
+    http_port: 0
+    build_command: "npm ci && npm run build"
+    run_command: "npm run worker"
+    envs:
+      - key: NODE_ENV
+        value: production
+      - key: INNGEST_APP_NAME
+        value: nextjs-inngest-doapp
+      - key: INNGEST_ENV
+        value: prod
+      - key: INNGEST_EVENT_KEY
+        type: SECRET
+        scope: RUN_TIME
+      - key: INNGEST_SIGNING_KEY
+        type: SECRET
+        scope: RUN_TIME
