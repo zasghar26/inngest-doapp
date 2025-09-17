@@ -6,10 +6,33 @@ function isEmail(v) {
 }
 
 export async function POST(req) {
-  const form = await req.formData();
-  const email = String(form.get("email") || "");
-  if (!isEmail(email)) return NextResponse.json({ error: "Invalid email" }, { status: 400 });
+  try {
+    const ct = req.headers.get("content-type") || "";
+    let email = "";
 
-  await inngest.send({ name: "app/user.created", data: { email, at: new Date().toISOString() } });
-  return NextResponse.redirect(new URL("/", req.url), 303);
+    if (ct.includes("application/json")) {
+      const json = await req.json().catch(() => ({}));
+      email = String(json.email || "");
+    } else {
+      const form = await req.formData();
+      email = String(form.get("email") || "");
+    }
+
+    if (!isEmail(email)) {
+      return NextResponse.json({ error: "Invalid email" }, { status: 400 });
+    }
+
+    // If the Event Key is missing in prod, sending will throw -> we catch below.
+    await inngest.send({
+      name: "app/user.created",
+      data: { email, at: new Date().toISOString() },
+    });
+
+    // Success: go home
+    return NextResponse.redirect(new URL("/?ok=1", req.url), 303);
+  } catch (err) {
+    console.error("Signup handler error:", err);
+    // Don’t leak details to the user; redirect with an error flag instead of 500
+    return NextResponse.redirect(new URL("/?error=signup", req.url), 303);
+  }
 }
