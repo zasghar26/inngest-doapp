@@ -21,5 +21,5 @@ export async function POST(req) {
     data: { email },
   });
 
-  return NextResponse.redirect("/", { status: 303 });
+  return NextResponse.redirect(new URL("/", req.url), 303);
 }
