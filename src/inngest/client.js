@@ -1,12 +1,16 @@
-// inngest/client.ts
 import { Inngest } from "inngest";
 
+/**
+ * Minimal, robust Inngest client.
+ * - id: required and stable (prevents build crash)
+ * - name/env: optional metadata
+ * - eventKey: required only if you call `send()` from the server in prod
+ * - baseUrl: leave undefined for Inngest Cloud
+ */
 export const inngest = new Inngest({
-  id: process.env.INNGEST_APP_ID ?? "nextjs-inngest-doapp", // <-- required
-  name: process.env.INNGEST_APP_NAME,                       // optional
-  env: process.env.INNGEST_ENV ?? "prod",                   // optional
-  // Only set baseUrl if you’re self-hosting Inngest; otherwise omit it.
+  id: process.env.INNGEST_APP_ID ?? "nextjs-inngest-doapp",
+  name: process.env.INNGEST_APP_NAME,
+  env: process.env.INNGEST_ENV ?? "prod",
   ...(process.env.INNGEST_BASE_URL ? { baseUrl: process.env.INNGEST_BASE_URL } : {}),
-  // Needed if you call `inngest.send()` from your API routes in prod:
   ...(process.env.INNGEST_EVENT_KEY ? { eventKey: process.env.INNGEST_EVENT_KEY } : {}),
 });
