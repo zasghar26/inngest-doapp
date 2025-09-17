@@ -1,25 +1,31 @@
 import { NextResponse } from "next/server";
 import { inngest } from "../../../src/inngest/client.js";
 
+function isEmail(v) {
+  return typeof v === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+}
+
 export async function POST(req) {
-  const contentType = req.headers.get("content-type") || "";
+  const ct = req.headers.get("content-type") || "";
   let email = "";
-  if (contentType.includes("application/json")) {
-    const body = await req.json();
-    email = body.email;
+
+  if (ct.includes("application/json")) {
+    const json = await req.json().catch(() => ({}));
+    email = String(json.email || "");
   } else {
     const form = await req.formData();
-    email = form.get("email");
+    email = String(form.get("email") || "");
   }
 
-  if (!email) {
-    return NextResponse.json({ error: "Email is required" }, { status: 400 });
+  if (!isEmail(email)) {
+    return NextResponse.json({ error: "Invalid email" }, { status: 400 });
   }
 
   await inngest.send({
-    name: "user/created",
-    data: { email },
+    name: "app/user.created",
+    data: { email, at: new Date().toISOString() },
   });
 
+  // Redirect back to home (works on any hostname)
   return NextResponse.redirect(new URL("/", req.url), 303);
 }
