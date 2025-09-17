@@ -1,9 +1,8 @@
+// app/api/signup/route.js
 import { NextResponse } from "next/server";
 import { inngest } from "../../../src/inngest/client.js";
 
-function isEmail(v) {
-  return typeof v === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
-}
+const isEmail = (v) => typeof v === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
 export async function POST(req) {
   try {
@@ -22,17 +21,32 @@ export async function POST(req) {
       return NextResponse.json({ error: "Invalid email" }, { status: 400 });
     }
 
-    // If the Event Key is missing in prod, sending will throw -> we catch below.
-    await inngest.send({
-      name: "app/user.created",
-      data: { email, at: new Date().toISOString() },
-    });
+    // Send event, but never crash the request
+    let sent = false;
+    let sendError = null;
 
-    // Success: go home
-    return NextResponse.redirect(new URL("/?ok=1", req.url), 303);
+    try {
+      if (!process.env.INNGEST_EVENT_KEY) {
+        throw new Error("INNGEST_EVENT_KEY missing at runtime");
+      }
+      await inngest.send({
+        name: "app/user.created",
+        data: { email, at: new Date().toISOString() },
+      });
+      sent = true;
+    } catch (e) {
+      sendError = e instanceof Error ? e.message : String(e);
+      console.error("[/api/signup] inngest.send failed:", sendError);
+    }
+
+    // For form posts, redirect with result flags so the UI can show a message
+    const url = new URL("/", req.url);
+    url.searchParams.set("ok", sent ? "1" : "0");
+    if (sendError) url.searchParams.set("err", "send");
+    return NextResponse.redirect(url, 303);
   } catch (err) {
-    console.error("Signup handler error:", err);
-    // Don’t leak details to the user; redirect with an error flag instead of 500
-    return NextResponse.redirect(new URL("/?error=signup", req.url), 303);
+    console.error("[/api/signup] handler error:", err?.stack || err);
+    // Return JSON instead of throwing a 500
+    return NextResponse.json({ error: "Internal error" }, { status: 200 });
   }
 }
